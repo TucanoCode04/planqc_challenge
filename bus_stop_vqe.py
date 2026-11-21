@@ -7,21 +7,7 @@ from qiskit.quantum_info import SparsePauliOp, Statevector
 from scipy.optimize import minimize
 
 
-def run_vqe():
-
-    n = 12
-    layers = 1
-
-    costs = [2, 1, 3, 4, 2, 1, 3, 2, 4, 1, 3, 2]
-
-    edges = [
-        (0,1), (1,2), (0,2),
-        (3,4), (4,5), (3,5),
-        (6,7), (7,8), (6,8),
-        (9,10), (10,11), (9,11),
-        (0,3), (1,6), (2,9),
-        (4,7), (5,10), (8,11)
-    ]
+def run_vqe(n, layers, costs, edges):
 
     terms = []
 
@@ -57,7 +43,7 @@ def run_vqe():
         state = Statevector.from_instruction(bound)
         return np.real(state.expectation_value(H))
 
-    initial_theta = np.random.uniform(-4, 4, len(theta))
+    initial_theta = np.random.uniform(-pi, pi, len(theta))
 
     result = minimize(
         energy,
@@ -73,5 +59,18 @@ def run_vqe():
 
     return result, qc, H
 
+n = 12
+layers = 1
 
-result, circuit, H = run_vqe()
+costs = [2, 1, 3, 4, 2, 1, 3, 2, 4, 1, 3, 2]
+
+edges = [
+    (0,1), (1,2), (0,2),
+    (3,4), (4,5), (3,5),
+    (6,7), (7,8), (6,8),
+    (9,10), (10,11), (9,11),
+    (0,3), (1,6), (2,9),
+    (4,7), (5,10), (8,11)
+]
+
+result, circuit, H = run_vqe(n, layers, costs, edges)
