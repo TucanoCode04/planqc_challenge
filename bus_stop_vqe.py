@@ -43,7 +43,7 @@ def run_vqe(n, layers, costs, edges):
         state = Statevector.from_instruction(bound)
         return np.real(state.expectation_value(H))
 
-    initial_theta = np.random.uniform(-pi, pi, len(theta))
+    initial_theta = np.random.uniform(-0.1, 0.1, len(theta))
 
     result = minimize(
         energy,
