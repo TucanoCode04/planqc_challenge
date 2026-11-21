@@ -1,2 +1,17 @@
-# Papers (local reference only)
+# Reference material (local only: challenge docs, papers, template repo copy, plan)
 Tucano/Papers/
+Tucano/Challenge/
+Tucano/*.parquet
+# organizers' validator: use as a black box, never commit
+Tucano/pushquantum_validator/
+
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
