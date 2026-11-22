@@ -11,13 +11,15 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 OUT = Path(__file__).resolve().parent
-OURS = "#1A6FA8"
+# Palette: deep navy (dominant), laser orange (ours / highlights), grey (baselines). Backgrounds transparent.
+NAVY = "#14283D"
+OURS = "#D9622B"
 BASE = "#9AA0A6"
-INK = "#222222"
-MUTED = "#666666"
-STORAGE_BG = "#EAF2F8"
-ENTANGLE_BG = "#FBEADF"
-plt.rcParams.update({"font.family": "DejaVu Sans", "figure.facecolor": "white"})
+INK = NAVY
+MUTED = "#5B6B7A"
+STORAGE_BG = "#E3ECF3"
+ENTANGLE_BG = "#FBE3D3"
+plt.rcParams.update({"font.family": "DejaVu Sans", "figure.facecolor": "none", "text.color": INK})
 
 # --- bus-stop graph (positions follow the figure in the challenge brief) -------------------------------------------
 POS = {
@@ -62,8 +64,8 @@ def bus_stop_graph() -> None:
     ax.set_aspect("equal")
     ax.axis("off")
     fig.tight_layout()
-    fig.savefig(OUT / "bus_stop_graph.png", dpi=200)
-    fig.savefig(OUT / "bus_stop_graph.svg")
+    fig.savefig(OUT / "bus_stop_graph.png", dpi=200, transparent=True)
+    fig.savefig(OUT / "bus_stop_graph.svg", transparent=True)
     plt.close(fig)
 
 
@@ -72,21 +74,23 @@ def ent_x(c: int) -> float:
     return 2 * (c // 2) + 0.3 * (c % 2)
 
 
-def _zone(ax, x0: float, y0: float, w: float, h: float, color: str, label: str) -> None:
+def _zone(ax, x0: float, y0: float, w: float, h: float, color: str, label: str, label_color: str = INK) -> None:
     ax.add_patch(FancyBboxPatch((x0, y0), w, h, boxstyle="round,pad=0.02,rounding_size=0.25", fc=color, ec="none"))
-    ax.text(x0 + w + 0.35, y0 + h / 2, label, va="center", ha="left", fontsize=12, color=INK)
+    ax.text(x0 + w + 0.35, y0 + h / 2, label, va="center", ha="left", fontsize=12, color=label_color)
 
 
-def device_zones() -> None:
+def device_zones(dark: bool = False) -> None:
+    """`dark`: white labels, for the dark title slide."""
+    lc = "white" if dark else INK
     fig, ax = plt.subplots(figsize=(6, 6.5))
-    _zone(ax, -0.6, -0.6, 9.9, 10.3, STORAGE_BG, "storage\nRx, Rz")
-    _zone(ax, -0.6, 9.9, 9.9, 10.2, ENTANGLE_BG, "entangling\nCZ")
+    _zone(ax, -0.6, -0.6, 9.9, 10.3, STORAGE_BG, "storage\nRx, Rz", lc)
+    _zone(ax, -0.6, 9.9, 9.9, 10.2, ENTANGLE_BG, "entangling\nCZ", lc)
     atoms = {(1, 9), (2, 9), (3, 9), (4, 9), (6, 8), (7, 8), (2, 7), (5, 6), (8, 5)}
     for r in range(10):
         for c in range(10):
             filled = (c, r) in atoms
             ax.scatter(
-                c, r, s=55, color=OURS if filled else "white", edgecolor=OURS if filled else BASE, lw=1, zorder=3
+                c, r, s=55, color=NAVY if filled else "white", edgecolor=NAVY if filled else BASE, lw=1, zorder=3
             )
     for r in range(10, 20):
         for c in range(10):
@@ -98,8 +102,9 @@ def device_zones() -> None:
     ax.set_aspect("equal")
     ax.axis("off")
     fig.tight_layout()
-    fig.savefig(OUT / "device_zones.png", dpi=200)
-    fig.savefig(OUT / "device_zones.svg")
+    name = "device_zones_dark" if dark else "device_zones"
+    fig.savefig(OUT / f"{name}.png", dpi=200, transparent=True)
+    fig.savefig(OUT / f"{name}.svg", transparent=True)
     plt.close(fig)
 
 
@@ -133,13 +138,14 @@ def row_move() -> None:
     ax.set_aspect("equal")
     ax.axis("off")
     fig.tight_layout()
-    fig.savefig(OUT / "row_move.png", dpi=200)
-    fig.savefig(OUT / "row_move.svg")
+    fig.savefig(OUT / "row_move.png", dpi=200, transparent=True)
+    fig.savefig(OUT / "row_move.svg", transparent=True)
     plt.close(fig)
 
 
 if __name__ == "__main__":
     bus_stop_graph()
     device_zones()
+    device_zones(dark=True)
     row_move()
     print("diagrams written to", OUT)

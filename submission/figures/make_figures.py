@@ -11,11 +11,13 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 OUT = Path(__file__).resolve().parent
-OURS = "#1A6FA8"
+# Palette: deep navy (dominant), laser orange (ours / highlights), grey (baselines). Backgrounds transparent.
+NAVY = "#14283D"
+OURS = "#D9622B"
 BASE = "#9AA0A6"
-INK = "#222222"
-MUTED = "#666666"
-GRID = "#E6E6E6"
+INK = NAVY
+MUTED = "#5B6B7A"
+GRID = "#E3E7EB"
 
 plt.rcParams.update(
     {
@@ -27,16 +29,17 @@ plt.rcParams.update(
         "ytick.color": MUTED,
         "axes.spines.top": False,
         "axes.spines.right": False,
-        "figure.facecolor": "white",
-        "axes.facecolor": "white",
+        "figure.facecolor": "none",
+        "text.color": INK,
+        "axes.facecolor": "none",
     }
 )
 
 
 def _save(fig: plt.Figure, name: str) -> None:
     fig.tight_layout()
-    fig.savefig(OUT / f"{name}.png", dpi=200)
-    fig.savefig(OUT / f"{name}.svg")
+    fig.savefig(OUT / f"{name}.png", dpi=200, transparent=True)
+    fig.savefig(OUT / f"{name}.svg", transparent=True)
     plt.close(fig)
 
 
