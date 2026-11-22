@@ -100,7 +100,6 @@ def vqe_success() -> None:
     ax.set_xlabel("random starts that reach the optimum (cost 14), out of 20")
     ax.xaxis.grid(True, color=GRID)
     ax.set_axisbelow(True)
-    ax.set_title("Entanglement makes the VQE trainable", loc="left", color=INK, fontsize=15)
     _save(fig, "vqe_success")
 
 
