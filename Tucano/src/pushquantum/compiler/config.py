@@ -3,6 +3,21 @@
 History:
 - v0  everything off: one atom per move, atoms go home after every pulse. Valid everywhere, official score 65.4%.
 - v1a merge_moves on: many atoms per `move`. Official score 72.1%.
+- v1b reuse + pick_best: atoms in consecutive pulses stay up; per circuit keep the cheaper. Official score 76.0%.
+- v2a home="snake": Cuthill-McKee order laid out as a snake; pick_best also tries both home layouts. Score 76.7%.
+
+REVIEW-COMMENT (why each step; maybe delete before submitting):
+- v0 -> v1a: the validator scores the SUM over `move` instructions of the longest atom trip in each move. One move
+  carrying many atoms costs only its longest trip, so merging moves (a + b -> max(a, b)) was the biggest lever.
+  Putting separate moves in the same parallel step does not help: the distance still adds up (checked).
+- v1a -> v1b: every atom went home after every pulse, even when its next gate was another CZ. Staying up saves a
+  trip down and up. The validator forbids atoms waiting in the entangling zone during a pulse they are not part of,
+  so only atoms of the NEXT pulse may stay. It helps iHVA but hurt some random circuits (sideways shifts cost up to
+  1.7 and merge less well), so both versions are compiled and the cheaper one is kept.
+- v1b -> v2a: the BFS home layout started from the busiest qubit, i.e. the middle of a chain, so HEA chains landed
+  in storage as 1, 0, 2, 3, ... and the second round's pairs did not line up for one merged move. Cuthill-McKee
+  starts from an end of the graph (a chain comes out as 0, 1, 2, ...), and the snake keeps the chain connected
+  across rows.
 """
 
 from __future__ import annotations
@@ -12,6 +27,7 @@ from typing import Literal
 
 DistModel = Literal["grid", "physical"]
 Colouring = Literal["greedy", "cpsat"]
+HomeMethod = Literal["bfs", "snake"]
 
 
 @dataclass(frozen=True)
@@ -30,7 +46,16 @@ class Config:
     # row_merge: bool = False
     # parallel_moves: bool = False
 
+    # v1b: after a pulse, atoms that are also in the next pulse stay in the entangling zone (only shift sideways).
     reuse: bool = False
+
+    # v2a: initial loading. "bfs" = v0 order from the busiest qubit; "snake" = Cuthill-McKee order, snake rows.
+    home: HomeMethod = "snake"
+
+    # compile every combination of reuse (off/on) x home (bfs/snake), keep the cheapest (distance, then depth),
+    # measured by our own copy of the metric (cost.py)
+    pick_best: bool = True
+
     colouring: Colouring = "greedy"
     seed: int = 0
 
