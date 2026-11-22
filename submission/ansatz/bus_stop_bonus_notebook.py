@@ -3,6 +3,7 @@
 # dependencies = [
 #     "marimo",
 #     "matplotlib",
+#     "networkx",
 #     "numpy",
 #     "polars==2.1.0",
 #     "qiskit==2.6.2",
@@ -609,11 +610,11 @@ def _():
 
     ## 4. End-to-End Neutral-Atom Compilation
 
-    This section invokes our zoned neutral-atom compiler `compile_circuit(circuit, architecture_spec)` from
-    `solution.py` across all benchmark circuits on the default 2-zone architecture spec, appending
-    **Compiled Moves, Compiled Depth (excl. moves), and Sequential Move Distance (upper bound)** directly to
-    the comparison table (the official parallel Cartesian distance replaces this upper bound when evaluated
-    with `pushquantum-validator`).
+    This section invokes our zoned neutral-atom compiler `compile_circuit(circuit, architecture_spec)` from the
+    `pushquantum` package (`../src`) across all benchmark circuits on the default 2-zone architecture spec, appending
+    **Compiled Moves, Compiled Depth (excl. moves), and Move Distance** directly to the comparison table.
+    Move Distance is the sum over `move` instructions of the longest atom trip in each move, which is the distance
+    the official `pushquantum-validator` scores.
 
     To target an alternate compiler module, set `COMPILER_MODULE` below.
     """)
@@ -624,7 +625,7 @@ def _():
 def _(benchmark_circuits, benchmark_df):
     import importlib as _importlib
 
-    COMPILER_MODULE = "solution"  # Module exposing compile_circuit(circuit, architecture_spec)
+    COMPILER_MODULE = "pushquantum"  # Module exposing compile_circuit(circuit, architecture_spec)
 
     _FALLBACK_DEFAULT_SPEC = {
         "loading_zone": "storage",
@@ -640,24 +641,19 @@ def _(benchmark_circuits, benchmark_df):
                 "y": [10, 19],
                 "spacing": 1.0,
                 "pairs": {"axis": "x", "distance": 0.3},
-                "operations": ["cz", "rzz"],
+                "operations": ["cz"],
             },
         },
     }
 
     def _resolve_default_spec(compiler_mod) -> dict:
-        """Load default_spec() from compiler module, falling back to readme.default_spec() or inline spec."""
-        spec_fn = getattr(compiler_mod, "default_spec", None)
-        if callable(spec_fn):
-            return spec_fn()
+        """Load the bundled architectures/default.json of the pushquantum package, else the inline spec."""
         try:
-            readme_mod = _importlib.import_module("readme")
-            readme_spec_fn = getattr(readme_mod, "default_spec", None)
-            if callable(readme_spec_fn):
-                return readme_spec_fn()
+            from pushquantum.architecture import load_spec
+
+            return load_spec(None)
         except Exception:
-            pass
-        return dict(_FALLBACK_DEFAULT_SPEC)
+            return dict(_FALLBACK_DEFAULT_SPEC)
 
     def _physical_xy(site: tuple[int, int], spec: dict) -> tuple[float, float]:
         """Compute physical (x, y) coordinates accounting for entangling pair geometry."""
@@ -709,12 +705,17 @@ def _(benchmark_circuits, benchmark_df):
         return {
             "Compiled Moves": int(ops.get("move", 0)),
             "Compiled Depth (excl. moves)": int(non_move.remove_final_measurements(inplace=False).depth()),
-            "Sequential Move Distance (upper bound)": round(total_move_dist, 3),
+            "Move Distance": round(total_move_dist, 3),
         }
 
     compiler_table = None
     _status_msg = None
     try:
+        import sys as _sys
+
+        _src_dir = str(Path("..").resolve() / "src")  # the notebook runs from ansatz/; the package is in ../src
+        if _src_dir not in _sys.path:
+            _sys.path.insert(0, _src_dir)
         _mod = _importlib.import_module(COMPILER_MODULE)
         _compile_fn = getattr(_mod, "compile_circuit")
         _spec = _resolve_default_spec(_mod)
@@ -725,7 +726,7 @@ def _(benchmark_circuits, benchmark_df):
         if _probe_compiled.size() == 0:
             _status_msg = (
                 f"**Compilation status:** Found `{COMPILER_MODULE}.compile_circuit`, which currently returns "
-                "an empty circuit (template placeholder). Re-run this notebook once `solution.py` contains the "
+                "an empty circuit (template placeholder). Re-run this notebook once the `pushquantum` package contains the "
                 "full router implementation to automatically populate compiled movement distance and depth below."
             )
         else:
@@ -741,7 +742,7 @@ def _(benchmark_circuits, benchmark_df):
                             "Circuit": _label,
                             "Compiled Moves": None,
                             "Compiled Depth (excl. moves)": None,
-                            "Sequential Move Distance (upper bound)": None,
+                            "Move Distance": None,
                             "Compiler Status": f"{type(_exc).__name__}: {_exc}",
                         }
                     )

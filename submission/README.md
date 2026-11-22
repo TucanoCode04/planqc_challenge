@@ -1,4 +1,4 @@
-# Team Tucano — planqc × PushQuantum 2026
+# Team QubiTO-gether — planqc × PushQuantum 2026
 
 Two parts, one goal: solve the 12-bus-stop problem with a variational circuit, and run circuits like it on a zoned
 neutral-atom machine with as little atom movement as possible.
