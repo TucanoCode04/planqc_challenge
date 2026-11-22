@@ -14,7 +14,7 @@ import pushquantum.move  # noqa: F401 -- registers QuantumCircuit.move
 from pushquantum.compiler.config import Config
 from pushquantum.compiler.geometry import Device
 from pushquantum.compiler.ir import CZRound, Layout, MoveSet, Schedule, StoragePhase
-from pushquantum.compiler.placement import home_layout, round_targets, shift_targets
+from pushquantum.compiler.placement import grid_targets, home_layout, round_targets, shift_targets
 from pushquantum.compiler.routing import route
 
 
@@ -78,9 +78,14 @@ def _return_sites(
 
 
 def emit(
-    original: QuantumCircuit, global_phase: float, schedule: Schedule, device: Device, config: Config
+    original: QuantumCircuit,
+    global_phase: float,
+    schedule: Schedule,
+    device: Device,
+    config: Config,
+    home_override: Layout | None = None,
 ) -> tuple[QuantumCircuit, Layout]:
-    initial = home_layout(schedule, device, config.home)
+    initial = dict(home_override) if home_override else home_layout(schedule, device, config.home)
     home = dict(initial)  # where each atom returns to; changes with dynamic_return
     layout = dict(home)
     qc = original.copy_empty_like()
@@ -105,7 +110,7 @@ def emit(
         move_to({q: home[q] for q, site in layout.items() if q not in in_round and device.in_entangling(site)})
 
         occupied = {site for q, site in layout.items() if q not in in_round}
-        place = shift_targets if config.targets == "shift" else round_targets
+        place = {"shift": shift_targets, "grid": grid_targets}.get(config.targets, round_targets)
         move_to(place(step, layout, device, occupied))
         for a, b in step.pairs:
             qc.cz(a, b)

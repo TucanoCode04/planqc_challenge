@@ -10,6 +10,7 @@ History:
 - v3a group_zz: commuting ZZ terms grouped by edge colour (QAOA: one pulse pair per colour, not per pair) Score 77.2%.
 - v3b fanout: the hub's ZZ terms spread over copies on extra atoms (max degree n-1 -> ~3).
 - v3c rank="balanced", depth_weight=0.3 (measured: 0 -> 77.18, 0.3 -> 77.30, 1.0 -> 76.55). Score 77.3%.
+- v4 grid2d: 2D layout (annealing) + colours by grid position + interleaved vertical pairs. Score 77.5%.
 
 REVIEW-COMMENT (why each step; maybe delete before submitting):
 - v0 -> v1a: the validator scores the SUM over `move` instructions of the longest atom trip in each move. One move
@@ -47,8 +48,8 @@ from typing import Literal
 
 DistModel = Literal["grid", "physical"]
 Colouring = Literal["greedy", "cpsat"]
-HomeMethod = Literal["bfs", "snake"]
-TargetMethod = Literal["hungarian", "shift"]
+HomeMethod = Literal["bfs", "snake", "grid"]
+TargetMethod = Literal["hungarian", "shift", "grid"]
 Rank = Literal["distance_first", "balanced"]
 
 
@@ -90,6 +91,10 @@ class Config:
     group_zz: bool = True
     # v3b: with group_zz, copy a hub qubit (Max-Cut reference) onto extra atoms and spread its ZZ terms over the copies
     fanout: bool = True
+
+    # v4: also try a 2D layout (simulated annealing: partners become left/right or up/down neighbours),
+    # colours chosen by grid position, vertical pairs interleaved onto one entangling row
+    grid2d: bool = True
 
     # compile every combination of reuse x home x targets x dynamic_return, keep the cheapest
     # (distance, then depth), measured by our own copy of the metric (cost.py)

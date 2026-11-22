@@ -128,9 +128,29 @@ def _copy_rounds(hub: int, copies: list[int]) -> list[list[tuple[int, int]]]:
     return rounds
 
 
-def _emit_zz(out: QuantumCircuit, zz: dict[tuple[int, int], float]) -> None:
+def _geo_colours(edges: list[tuple[int, int]], layout: dict[int, tuple[int, int]]) -> list[list[tuple[int, int]]]:
+    """v4 (2D): colour pairs by where they sit in the grid layout. Horizontal neighbours with the left one on an even /
+    odd column, vertical neighbours with the upper one on an even / odd row: each class is automatically a set of
+    disjoint pairs and is lifted with few merged moves. Remaining pairs: greedy colouring."""
+    classes: dict[str, list[tuple[int, int]]] = {"h0": [], "h1": [], "v0": [], "v1": []}
+    rest: list[tuple[int, int]] = []
+    for a, b in edges:
+        (xa, ya), (xb, yb) = layout[a], layout[b]
+        if ya == yb and abs(xa - xb) == 1:
+            classes[f"h{min(xa, xb) % 2}"].append((a, b))
+        elif xa == xb and abs(ya - yb) == 1:
+            classes[f"v{max(ya, yb) % 2}"].append((a, b))
+        else:
+            rest.append((a, b))
+    return [c for c in classes.values() if c] + _colour_edges(rest)
+
+
+def _emit_zz(
+    out: QuantumCircuit, zz: dict[tuple[int, int], float], layout: dict[int, tuple[int, int]] | None = None
+) -> None:
     degree = Counter(q for e in zz for q in e)
-    for colour in _colour_edges(list(zz)):
+    colours = _geo_colours(list(zz), layout) if layout else _colour_edges(list(zz))
+    for colour in colours:
         terms = []
         for a, b in colour:
             c, t = (a, b) if degree[a] >= degree[b] else (b, a)
@@ -147,7 +167,13 @@ def _emit_zz(out: QuantumCircuit, zz: dict[tuple[int, int], float]) -> None:
             out.h(t)
 
 
-def group_zz(body: QuantumCircuit, fanout: bool = False, max_qubits: int = 100) -> QuantumCircuit:
+def group_zz(
+    body: QuantumCircuit,
+    fanout: bool = False,
+    max_qubits: int = 100,
+    layout: dict[int, tuple[int, int]] | None = None,
+    collect: set[tuple[int, int]] | None = None,
+) -> QuantumCircuit:
     """v3a (ZZ grouping): ZZ rotations (`cx(a,b) rz(b) cx(a,b)` or `rzz`) all commute with each other and with diagonal
     single-qubit gates. Each run of them is re-emitted colour by colour: per colour (a set of disjoint pairs)
     H(targets) - CZ - Rx(theta)(targets) - CZ - H(targets), which equals the ZZ rotations exactly (H Rz H = Rx).
@@ -156,6 +182,7 @@ def group_zz(body: QuantumCircuit, fanout: bool = False, max_qubits: int = 100) 
     v3b (`fanout`): if one hub qubit has far more partners than the rest (Max-Cut reference qubit), copy it onto extra
     qubits in the Z basis with a doubling tree of CX (|x>|0> -> |x>|x>), spread its ZZ terms over hub + copies, then
     undo the copies. ZZ(copy, p) = ZZ(hub, p) while the copy holds the hub's value, and the copies end in |0>.
+    `layout` (v4): colour by grid position instead of greedily. `collect`: receives every two-qubit pair used.
     The max degree drops from n-1 to ~3, so far fewer colours (pulses). Extra qubits are allowed (checked: the
     validator accepts correct ancilla circuits and rejects wrong ones)."""
     segments = _segments(body)
@@ -176,7 +203,9 @@ def group_zz(body: QuantumCircuit, fanout: bool = False, max_qubits: int = 100) 
         for op, qs in diag:
             out.append(op, qs)
         if not plan or not extra:
-            _emit_zz(out, zz)
+            if collect is not None:
+                collect.update(zz)
+            _emit_zz(out, zz, layout)
             continue
         hub, k = plan
         copies = extra[: min(k, len(extra))]
@@ -192,10 +221,13 @@ def group_zz(body: QuantumCircuit, fanout: bool = False, max_qubits: int = 100) 
                 i += 1
             else:
                 spread[(a, b)] = spread.get((a, b), 0.0) + theta
+        if collect is not None:
+            collect.update(spread)
+            collect.update(tuple(sorted(pair)) for rnd in rounds for pair in rnd)
         for rnd in rounds:
             for src, dst in rnd:
                 out.cx(src, dst)
-        _emit_zz(out, spread)
+        _emit_zz(out, spread, layout)
         for rnd in reversed(rounds):
             for src, dst in rnd:
                 out.cx(src, dst)

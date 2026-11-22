@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import random
 from collections import Counter, deque
 
 import networkx as nx
@@ -139,4 +141,100 @@ def shift_targets(rnd: CZRound, layout: Layout, device: Device, occupied: set[Si
     if rest:
         taken = occupied | set(targets.values())
         targets |= round_targets(CZRound(rest, rnd.block), layout, device, taken)
+    return targets
+
+
+def grid_layout(
+    edges: set[tuple[int, int]], num_qubits: int, device: Device, seed: int = 0, steps: int = 20000
+) -> Layout:
+    """v4 (2D): simulated annealing over storage positions. Cost = for each pair, 0 if the two atoms are grid
+    neighbours (left/right or up/down: both can reach a pair site with merged moves), else their Manhattan distance;
+    plus a small penalty per row away from the entangling zone. Move: put a random qubit on a random site of the rows
+    nearest the entangling zone (swapping with the qubit there, if any). Starts from the Cuthill-McKee snake."""
+    rng = random.Random(seed)
+    width = device.storage.x[1] - device.storage.x[0] + 1
+    rows_needed = math.ceil(num_qubits / width) + 1
+    snake = _snake_sites(device)
+    sites = [s for s in snake if device._rows_to_entangling(s[1]) <= rows_needed]
+    graph = nx.Graph()
+    graph.add_nodes_from(range(num_qubits))
+    graph.add_edges_from(edges)
+    order = list(nx.utils.cuthill_mckee_ordering(graph))
+    pos: dict[int, Site] = {q: snake[i] for i, q in enumerate(order)}
+    nbrs = {q: list(graph.neighbors(q)) for q in range(num_qubits)}
+
+    def pair_cost(a: Site, b: Site) -> float:
+        d = abs(a[0] - b[0]) + abs(a[1] - b[1])
+        return 0.0 if d == 1 else float(d)
+
+    def node_cost(q: int, at: Site) -> float:
+        return sum(pair_cost(at, pos[n]) for n in nbrs[q] if n in pos) + 0.05 * device._rows_to_entangling(at[1])
+
+    occupant: dict[Site, int] = {site: q for q, site in pos.items()}
+    for step in range(steps):
+        temp = 2.0 * (1 - step / steps) + 0.01
+        q = rng.randrange(num_qubits)
+        target = rng.choice(sites)
+        src = pos[q]
+        if target == src:
+            continue
+        other = occupant.get(target)
+        old = node_cost(q, src) + (node_cost(other, target) if other is not None else 0.0)
+        pos[q] = target
+        if other is not None:
+            pos[other] = src
+        new = node_cost(q, target) + (node_cost(other, src) if other is not None else 0.0)
+        if new <= old or rng.random() < math.exp((old - new) / temp):
+            occupant.pop(src, None)
+            occupant[target] = q
+            if other is not None:
+                occupant[src] = other
+        else:
+            pos[q] = src
+            if other is not None:
+                pos[other] = target
+    return pos
+
+
+def grid_targets(rnd: CZRound, layout: Layout, device: Device, occupied: set[Site]) -> Layout:
+    """v4 (2D): vertical neighbours are interleaved onto one entangling row (upper atom -> even column, lower atom ->
+    odd column, columns spread x2; storage columns of the right half use a second row), so each storage row moves as
+    one block. Horizontal neighbours: shift_targets. Anything else: Hungarian (inside shift_targets)."""
+    if not all(device.in_storage(layout[q]) for q in rnd.qubits):
+        return round_targets(rnd, layout, device, occupied)
+    x0 = device.entangling.x[0]
+    half = device.pairs_per_row
+    rows_by_distance: list[int] = []
+    for row, _ in device.pair_sites:
+        if row not in rows_by_distance:
+            rows_by_distance.append(row)
+    vertical = [
+        (a, b)
+        for a, b in rnd.pairs
+        if layout[a][0] == layout[b][0] and abs(layout[a][1] - layout[b][1]) == 1 and layout[a][0] - x0 < 2 * half
+    ]
+    row_for: dict[tuple[int, int], int] = {}
+    free_rows = iter(rows_by_distance)
+    for low in sorted({min(layout[a][1], layout[b][1]) for a, b in vertical}, reverse=True):
+        for side in (0, 1):
+            row = next(free_rows, None)
+            if row is not None:
+                row_for[(low, side)] = row
+    targets: Layout = {}
+    taken = set(occupied)
+    for a, b in vertical:
+        upper, lower = (a, b) if layout[a][1] > layout[b][1] else (b, a)
+        x, low = layout[upper][0] - x0, layout[lower][1]
+        side = 0 if x < half else 1
+        if (low, side) not in row_for:
+            continue
+        col = x0 + 2 * (x - side * half)
+        left, right = (col, row_for[(low, side)]), (col + 1, row_for[(low, side)])
+        if left in taken or right in taken:
+            continue
+        targets[upper], targets[lower] = left, right
+        taken |= {left, right}
+    rest = [pair for pair in rnd.pairs if pair[0] not in targets]
+    if rest:
+        targets |= shift_targets(CZRound(rest, rnd.block), layout, device, taken)
     return targets

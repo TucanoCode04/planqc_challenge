@@ -16,6 +16,7 @@ from pushquantum.compiler.config import DEFAULT, Config
 from pushquantum.compiler.cost import move_distance
 from pushquantum.compiler.emit import emit
 from pushquantum.compiler.geometry import Device
+from pushquantum.compiler.placement import grid_layout
 from pushquantum.compiler.preprocess import group_zz, split_measurements, to_native
 from pushquantum.compiler.schedule import build_schedule
 
@@ -34,6 +35,20 @@ def compile_circuit(
     fuse_options = (False, True) if config.pick_best else (config.fuse_rz,)
     max_qubits = len(device.storage_sites)
     natives = {m: to_native(group_zz(body, m[1], max_qubits) if m[0] else body) for m in zz_modes}
+
+    # v4 (2D): pair graph -> 2D layout -> circuit coloured by grid position
+    grid_modes = [(True, False), (True, True)] if config.pick_best and config.grid2d else []
+    grid_natives, grid_layouts = {}, {}
+    for m in grid_modes:
+        pairs: set[tuple[int, int]] = set()
+        first = to_native(group_zz(body, m[1], max_qubits, collect=pairs))
+        pairs |= {
+            tuple(sorted(first.find_bit(q).index for q in inst.qubits))
+            for inst in first.data
+            if inst.operation.name == "cz"
+        }
+        grid_layouts[m] = grid_layout(pairs, first.num_qubits, device, config.seed)
+        grid_natives[m] = to_native(group_zz(body, m[1], max_qubits, layout=grid_layouts[m]))
     schedules = {
         (m, f): build_schedule(natives[m], measurements, circuit.num_clbits, f) for m in zz_modes for f in fuse_options
     }
@@ -50,12 +65,33 @@ def compile_circuit(
         ]
     else:
         variants = [config]
+    for m in grid_modes:
+        for f in fuse_options:
+            schedules[(("grid", *m), f)] = build_schedule(grid_natives[m], measurements, circuit.num_clbits, f)
+        variants += [
+            replace(
+                config,
+                group_zz=True,
+                fanout=m[1],
+                fuse_rz=f,
+                reuse=r,
+                home="grid",
+                targets="grid",
+                dynamic_return=False,
+            )
+            for f in fuse_options
+            for r in (False, True)
+        ]
     best = None
     ref: tuple[float, int] | None = None
     for v in variants:
-        native = natives[(v.group_zz, v.fanout)]
-        schedule = schedules[((v.group_zz, v.fanout), v.fuse_rz)]
-        compiled, home = emit(native, native.global_phase, schedule, device, v)
+        if v.home == "grid":
+            m = (v.group_zz, v.fanout)
+            native, schedule, given = grid_natives[m], schedules[(("grid", *m), v.fuse_rz)], grid_layouts[m]
+        else:
+            native, given = natives[(v.group_zz, v.fanout)], None
+            schedule = schedules[((v.group_zz, v.fanout), v.fuse_rz)]
+        compiled, home = emit(native, native.global_phase, schedule, device, v, given)
         dist, depth = move_distance(compiled, home, device), _depth(compiled)
         ref = ref or (max(dist, 1e-9), max(depth, 1))
         if config.rank == "balanced":
