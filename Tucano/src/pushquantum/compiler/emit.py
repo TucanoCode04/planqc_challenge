@@ -9,7 +9,7 @@ from pushquantum.compiler.config import Config
 from pushquantum.compiler.geometry import Device
 from pushquantum.compiler.ir import CZRound, Layout, MoveSet, Schedule, StoragePhase
 from pushquantum.compiler.placement import home_layout, round_targets
-from pushquantum.compiler.routing import route_sequential
+from pushquantum.compiler.routing import route
 
 
 def _write_moves(qc: QuantumCircuit, sets: list[MoveSet]) -> None:
@@ -32,11 +32,11 @@ def emit(
             continue
         assert isinstance(step, CZRound)
         targets = round_targets(step, layout, device, set(layout.values()))
-        _write_moves(qc, route_sequential(layout, targets, device))
+        _write_moves(qc, route(layout, targets, device, config.merge_moves))
         for a, b in step.pairs:
             qc.cz(a, b)
         back = {q: home[q] for q in step.qubits}
-        _write_moves(qc, route_sequential(layout, back, device))
+        _write_moves(qc, route(layout, back, device, config.merge_moves))
     for q, c in schedule.measurements:
         qc.measure(q, c)
     return qc, home
