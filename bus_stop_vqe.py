@@ -4,10 +4,11 @@ import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterVector
 from qiskit.quantum_info import SparsePauliOp, Statevector
+from rustworkx import layers
 from scipy.optimize import minimize
 
 
-def run_vqe(n, layers, costs, edges):
+def run_vqe(n, layers, costs, edges, initial_theta):
 
     terms = []
 
@@ -43,14 +44,36 @@ def run_vqe(n, layers, costs, edges):
         state = Statevector.from_instruction(bound)
         return np.real(state.expectation_value(H))
 
-    initial_theta = np.random.uniform(-0.1, 0.1, len(theta))
-
     result = minimize(
         energy,
         initial_theta,
         method="COBYLA",
-        options={"maxiter": 3000}
+        options={"maxiter": 30000,
+                 "tol": 1e-6}
     )
+
+    optimized_circuit = qc.assign_parameters(
+        dict(zip(theta, result.x))
+    )
+
+    state = Statevector.from_instruction(optimized_circuit)
+
+    probabilities = state.probabilities()
+
+    most_probable_index = np.argmax(probabilities)
+
+    most_probable_state = format(most_probable_index, f"0{n}b")
+
+    most_probable_probability = probabilities[most_probable_index]
+
+    print("Most probable state:", most_probable_state)
+    print("Probability:", most_probable_probability)
+
+    optimal_index = int(most_probable_state, 2)
+
+    optimal_probability = probabilities[optimal_index]
+
+    print("Optimal state probability:", optimal_probability)
 
     print("Initial theta:", initial_theta)
     print("Optimized theta:", result.x)
@@ -73,4 +96,7 @@ edges = [
     (4,7), (5,10), (8,11)
 ]
 
-result, circuit, H = run_vqe(n, layers, costs, edges)
+initial_theta = np.random.uniform(-0.1, 0.1, n * layers)
+initial_theta[np.abs(initial_theta) < 1e-4] = 1e-4
+
+result, circuit, H = run_vqe(n, layers, costs, edges, initial_theta)
