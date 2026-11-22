@@ -63,6 +63,8 @@ def compile_circuit(
             for t in ("hungarian", "shift")
             for d in (False, True)
         ]
+        # v5: lookahead only changes the Hungarian targets, so only those variants get a lookahead copy
+        variants += [replace(v, lookahead=config.lookahead_try) for v in variants if v.targets == "hungarian"]
     else:
         variants = [config]
     for m in grid_modes:

@@ -110,8 +110,12 @@ def emit(
         move_to({q: home[q] for q, site in layout.items() if q not in in_round and device.in_entangling(site)})
 
         occupied = {site for q, site in layout.items() if q not in in_round}
-        place = {"shift": shift_targets, "grid": grid_targets}.get(config.targets, round_targets)
-        move_to(place(step, layout, device, occupied))
+        if config.targets == "shift":
+            move_to(shift_targets(step, layout, device, occupied))
+        elif config.targets == "grid":
+            move_to(grid_targets(step, layout, device, occupied))
+        else:
+            move_to(round_targets(step, layout, device, occupied, partners[i], config.lookahead))
         for a, b in step.pairs:
             qc.cz(a, b)
         returning = [q for q in in_round if not (config.reuse and q in stay_up[i])]

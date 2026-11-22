@@ -76,8 +76,17 @@ def home_layout(schedule: Schedule, device: Device, method: HomeMethod = "bfs") 
     return {q: sites[i] for i, q in enumerate(order)}
 
 
-def round_targets(rnd: CZRound, layout: Layout, device: Device, occupied: set[Site]) -> Layout:
-    """Hungarian matching: each pair -> a free pair site; cost = the longer of the two atoms' trips."""
+def round_targets(
+    rnd: CZRound,
+    layout: Layout,
+    device: Device,
+    occupied: set[Site],
+    next_partner: dict[int, int] | None = None,
+    lookahead: float = 0.0,
+) -> Layout:
+    """Hungarian matching: each pair -> a free pair site; cost = the longer of the two atoms' trips.
+    v5 (`lookahead` > 0): plus lookahead x distance from each slot to the current site of that atom's next
+    partner, so pairs are placed towards where they will be needed next (ZAC-style lookahead)."""
     free = [p for p in device.pair_sites if not occupied.intersection(device.pair_slots(p))]
     if len(free) < len(rnd.pairs):
         msg = "Not enough free pair sites for this round."
@@ -89,6 +98,13 @@ def round_targets(rnd: CZRound, layout: Layout, device: Device, occupied: set[Si
             left, right = device.pair_slots(p)
             straight = max(device.dist(layout[a], left), device.dist(layout[b], right))
             crossed = max(device.dist(layout[b], left), device.dist(layout[a], right))
+            if lookahead and next_partner:
+                straight += lookahead * (
+                    _ahead(a, left, layout, next_partner, device) + _ahead(b, right, layout, next_partner, device)
+                )
+                crossed += lookahead * (
+                    _ahead(b, left, layout, next_partner, device) + _ahead(a, right, layout, next_partner, device)
+                )
             cost[i, j] = min(straight, crossed)
             flip[i, j] = crossed < straight
     rows, cols = linear_sum_assignment(cost)
@@ -100,6 +116,12 @@ def round_targets(rnd: CZRound, layout: Layout, device: Device, occupied: set[Si
             a, b = b, a
         targets[a], targets[b] = left, right
     return targets
+
+
+def _ahead(q: int, slot: Site, layout: Layout, next_partner: dict[int, int], device: Device) -> float:
+    """Lookahead term: how far `slot` is from where q's next partner currently is (0 if q has none)."""
+    p = next_partner.get(q)
+    return device.dist(slot, layout[p]) if p is not None and p in layout else 0.0
 
 
 def shift_targets(rnd: CZRound, layout: Layout, device: Device, occupied: set[Site]) -> Layout:
