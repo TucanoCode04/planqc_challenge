@@ -2,23 +2,30 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # makes `pushquantum_validator` importable
+# The validator is not part of this repository. Looked up in: $PQ_VALIDATOR_DIR (the folder that CONTAINS
+# `pushquantum_validator/`), this project folder, or the sibling local workspace `../Tucano`.
+_ROOT = Path(__file__).resolve().parents[1]
+for _candidate in (os.environ.get("PQ_VALIDATOR_DIR"), _ROOT, _ROOT.parent / "Tucano"):
+    if _candidate and (Path(_candidate) / "pushquantum_validator").is_dir():
+        sys.path.insert(0, str(_candidate))
+        break
 
-from qiskit import QuantumCircuit
-
-from pushquantum.compiler import compile_circuit
-from pushquantum.compiler.config import DEFAULT, Config
-from pushquantum_validator import (
+from pushquantum_validator import (  # noqa: E402  (needs the path set up above)
     VerificationError,
     compute_metrics,
     strip_moves,
     verify_equivalence,
     verify_movement,
 )
+from qiskit import QuantumCircuit  # noqa: E402
+
+from pushquantum.compiler import compile_circuit  # noqa: E402
+from pushquantum.compiler.config import DEFAULT, Config  # noqa: E402
 
 
 def check(reference: QuantumCircuit, config: Config = DEFAULT) -> dict:

@@ -1,9 +1,9 @@
-# Reference material (local only: challenge docs, papers, template repo copy, plan)
-Tucano/Papers/
-Tucano/Challenge/
-Tucano/*.parquet
-# organizers' validator: use as a black box, never commit
-Tucano/pushquantum_validator/
+# Local workspace (reference material, plans, old copy of the code) - not part of the submission
+Tucano/
+
+# Organizers' validator and datasets: used locally as a black box, never committed
+**/pushquantum_validator/
+*.parquet
 
 # Python / uv
 .venv/
@@ -15,3 +15,6 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# local benchmark output
+**/bench/results.md

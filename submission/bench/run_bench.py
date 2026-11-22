@@ -22,8 +22,15 @@ ROOT = Path(__file__).resolve().parents[1]
 COLUMNS = ["valid", "qubits", "distance", "steps", "moves", "depth", "time_s", "error"]
 
 
+PARQUET = "pushquantum-2026-metric-hea-0.parquet"  # public Aqora dataset, not stored in the repository
+
+
 def public_circuits() -> dict[str, QuantumCircuit]:
-    table = pq.read_table(ROOT / "pushquantum-2026-metric-hea-0.parquet")
+    path = next((p for p in (ROOT / PARQUET, ROOT.parent / "Tucano" / PARQUET) if p.exists()), None)
+    if path is None:
+        print(f"{PARQUET} not found: download it from Aqora (planqc/pushquantum-2026-metric-hea) next to this project.")
+        return {}
+    table = pq.read_table(path)
     names, data = table.column("filename").to_pylist(), table.column("filedata").to_pylist()
     return {n: QuantumCircuit.from_qasm_str(d.decode()) for n, d in sorted(zip(names, data, strict=True))}
 
