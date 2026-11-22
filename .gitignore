@@ -21,3 +21,7 @@ build/
 
 # marimo cache (created when the notebook runs)
 __marimo__/
+
+# Aqora upload copies (local only)
+submission/aqora/
+/readme.py
