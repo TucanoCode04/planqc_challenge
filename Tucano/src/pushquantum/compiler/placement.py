@@ -98,3 +98,45 @@ def round_targets(rnd: CZRound, layout: Layout, device: Device, occupied: set[Si
             a, b = b, a
         targets[a], targets[b] = left, right
     return targets
+
+
+def shift_targets(rnd: CZRound, layout: Layout, device: Device, occupied: set[Site]) -> Layout:
+    """v2b: pairs sitting side by side in the same storage row all get the SAME column shift d (chosen so every left
+    atom lands on a left slot), and storage rows map in order onto the nearest entangling rows. One shared row map +
+    one shared column map = the router can lift them all with a single move. Other pairs: Hungarian on what's left."""
+    if not all(device.in_storage(layout[q]) for q in rnd.qubits):
+        return round_targets(rnd, layout, device, occupied)
+    x0, x1 = device.entangling.x
+    side_by_side: list[tuple[int, int]] = []
+    for a, b in rnd.pairs:
+        (xa, ya), (xb, yb) = layout[a], layout[b]
+        if ya == yb and abs(xa - xb) == 1:
+            side_by_side.append((a, b) if xa < xb else (b, a))  # (left atom, right atom)
+
+    def fits(pair: tuple[int, int], d: int) -> bool:
+        left_x = layout[pair[0]][0] + d
+        return (left_x - x0) % 2 == 0 and x0 <= left_x and left_x + 1 <= x1
+
+    shifts = sorted(range(x0 - x1, x1 - x0 + 1), key=abs)
+    d = max(shifts, key=lambda s: sum(fits(p, s) for p in side_by_side))  # ties: smallest |d| (max keeps the first)
+    placed = [p for p in side_by_side if fits(p, d)]
+
+    storage_rows = sorted({layout[a][1] for a, _ in placed})
+    nearest_rows: list[int] = []
+    for row, _ in device.pair_sites:
+        if row not in nearest_rows:
+            nearest_rows.append(row)
+    row_map = dict(zip(storage_rows, sorted(nearest_rows[: len(storage_rows)]), strict=True))
+
+    targets: Layout = {}
+    for a, b in placed:
+        (x, y) = layout[a]
+        left, right = (x + d, row_map[y]), (x + d + 1, row_map[y])
+        if left in occupied or right in occupied:
+            continue  # leave it to the Hungarian fallback
+        targets[a], targets[b] = left, right
+    rest = [p for p in rnd.pairs if p[0] not in targets]
+    if rest:
+        taken = occupied | set(targets.values())
+        targets |= round_targets(CZRound(rest, rnd.block), layout, device, taken)
+    return targets
